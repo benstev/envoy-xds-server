@@ -21,6 +21,7 @@ import (
 	"github.com/envoyproxy/go-control-plane/pkg/cache/v3"
 	serverv3 "github.com/envoyproxy/go-control-plane/pkg/server/v3"
 	log "github.com/sirupsen/logrus"
+	"github.com/stevesloka/envoy-xds-server/internal"
 	"github.com/stevesloka/envoy-xds-server/internal/processor"
 	"github.com/stevesloka/envoy-xds-server/internal/server"
 	"github.com/stevesloka/envoy-xds-server/internal/watcher"
@@ -31,15 +32,17 @@ var (
 
 	watchDirectoryFileName string
 	port                   uint
-	basePort               uint
-	mode                   string
 
-	nodeID string
+	nodeID         string
+	debug          bool
+	withAcccessLog bool
 )
 
 func init() {
 	l = log.New()
-	log.SetLevel(log.DebugLevel)
+	// log.SetLevel(log.DebugLevel)
+
+	flag.BoolVar(&debug, "debug", false, "Enable xDS server debug logging")
 
 	// The port that this xDS server listens on
 	flag.UintVar(&port, "port", 9002, "xDS management server port")
@@ -49,17 +52,22 @@ func init() {
 
 	// Define the directory to watch for Envoy configuration files
 	flag.StringVar(&watchDirectoryFileName, "watchDirectoryFileName", "config/config.yaml", "full path to directory to watch for files")
+
+	flag.BoolVar(&withAcccessLog, "withAccessLog", false, "Enable envoy access log")
 }
 
 func main() {
 	flag.Parse()
 
+	if debug {
+		log.SetLevel(log.DebugLevel)
+	}
+
 	// Create a cache
 	cache := cache.NewSnapshotCache(false, cache.IDHash{}, l)
 
 	// Create a processor
-	proc := processor.NewProcessor(
-		cache, nodeID, log.WithField("context", "processor"))
+	proc := processor.NewProcessor(cache, nodeID, log.WithField("context", "processor"), withAcccessLog)
 
 	// Create initial snapshot from file
 	proc.ProcessFile(watcher.NotifyMessage{
@@ -78,14 +86,12 @@ func main() {
 	go func() {
 		// Run the xDS server
 		ctx := context.Background()
-		srv := serverv3.NewServer(ctx, cache, nil)
+		cb := &internal.Callbacks{Debug: debug}
+		srv := serverv3.NewServer(ctx, cache, cb)
 		server.RunServer(ctx, srv, port)
 	}()
 
-	for {
-		select {
-		case msg := <-notifyCh:
-			proc.ProcessFile(msg)
-		}
+	for msg := range notifyCh {
+		proc.ProcessFile(msg)
 	}
 }

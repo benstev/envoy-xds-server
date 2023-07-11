@@ -16,21 +16,27 @@ package xdscache
 
 import (
 	"github.com/envoyproxy/go-control-plane/pkg/cache/types"
+	"github.com/envoyproxy/go-control-plane/pkg/resource/v3"
+	api "github.com/stevesloka/envoy-xds-server/apis/v1alpha1"
+
+	"github.com/stevesloka/envoy-xds-server/internal/auth"
 	"github.com/stevesloka/envoy-xds-server/internal/resources"
 )
 
 type XDSCache struct {
-	Listeners map[string]resources.Listener
-	Routes    map[string]resources.Route
-	Clusters  map[string]resources.Cluster
-	Endpoints map[string]resources.Endpoint
+	Listeners      map[string]resources.Listener
+	Routes         map[string]resources.Route
+	Clusters       map[string]resources.Cluster
+	Endpoints      map[string]resources.Endpoint
+	Authenticators map[string]auth.Authenticator
+	WithAccessLog  bool
 }
 
 func (xds *XDSCache) ClusterContents() []types.Resource {
 	var r []types.Resource
 
 	for _, c := range xds.Clusters {
-		r = append(r, resources.MakeCluster(c.Name))
+		r = append(r, resources.MakeCluster(c.Name, c.IsGrpc, c.Endpoints))
 	}
 
 	return r
@@ -50,7 +56,7 @@ func (xds *XDSCache) ListenerContents() []types.Resource {
 	var r []types.Resource
 
 	for _, l := range xds.Listeners {
-		r = append(r, resources.MakeHTTPListener(l.Name, l.RouteNames[0], l.Address, l.Port))
+		r = append(r, resources.MakeHTTPListener(l.Name, l.RouteNames[0], l.Address, l.Port, xds.WithAccessLog, xds.Authenticators))
 	}
 
 	return r
@@ -66,6 +72,16 @@ func (xds *XDSCache) EndpointsContents() []types.Resource {
 	return r
 }
 
+func (xds *XDSCache) AddAuthenticator(name string, iss string, aud []string, forward bool, secret string, match api.Match) {
+	xds.Authenticators[name] = auth.Authenticator{
+		Issuer:    iss,
+		Audiences: aud,
+		Forward:   forward,
+		Secret:    secret,
+		Match:     match,
+	}
+}
+
 func (xds *XDSCache) AddListener(name string, routeNames []string, address string, port uint32) {
 	xds.Listeners[name] = resources.Listener{
 		Name:       name,
@@ -75,17 +91,21 @@ func (xds *XDSCache) AddListener(name string, routeNames []string, address strin
 	}
 }
 
-func (xds *XDSCache) AddRoute(name, prefix string, clusters []string) {
+func (xds *XDSCache) AddRoute(name string, match api.Match, clusters []string, isGrpc bool, rewrite *api.Rewrite, externalAuth *bool) {
 	xds.Routes[name] = resources.Route{
-		Name:    name,
-		Prefix:  prefix,
-		Cluster: clusters[0],
+		Name:         name,
+		Match:        match,
+		Cluster:      clusters[0],
+		IsGrpc:       isGrpc,
+		Rewrite:      rewrite,
+		ExternalAuth: externalAuth,
 	}
 }
 
-func (xds *XDSCache) AddCluster(name string) {
+func (xds *XDSCache) AddCluster(name string, grpc bool) {
 	xds.Clusters[name] = resources.Cluster{
-		Name: name,
+		Name:   name,
+		IsGrpc: grpc,
 	}
 }
 
@@ -98,4 +118,16 @@ func (xds *XDSCache) AddEndpoint(clusterName, upstreamHost string, upstreamPort 
 	})
 
 	xds.Clusters[clusterName] = cluster
+}
+
+func (xds *XDSCache) MakeSnapshot() map[resource.Type][]types.Resource {
+	snap := map[resource.Type][]types.Resource{
+		// resource.EndpointType: xds.EndpointsContents(),
+		resource.ClusterType:  xds.ClusterContents(),
+		resource.RouteType:    xds.RouteContents(),
+		resource.ListenerType: xds.ListenerContents(),
+		// resource.RuntimeType:  []types.Resource{},
+		// resource.SecretType:   []types.Resource{},
+	}
+	return snap
 }

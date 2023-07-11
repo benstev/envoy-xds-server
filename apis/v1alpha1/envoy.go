@@ -15,8 +15,9 @@
 package v1alpha1
 
 type EnvoyConfig struct {
-	Name string `yaml:"name"`
-	Spec `yaml:"spec"`
+	Name           string `yaml:"name"`
+	Spec           `yaml:"spec"`
+	Authenticators []Authenticator
 }
 
 type Spec struct {
@@ -31,18 +32,46 @@ type Listener struct {
 	Routes  []Route `yaml:"routes"`
 }
 
+type MatchHeaders struct {
+	Name        string `yaml:"name"`
+	StringMatch string `yaml:"string_match"`
+}
+
+type Match struct {
+	Prefix  *string        `yaml:"prefix,omitempty"`
+	Path    *string        `yaml:"path,omitempty"`
+	Headers []MatchHeaders `yaml:"headers,omitempty"`
+}
+
+type Rewrite struct {
+	Prefix *string `yaml:"prefix,omitempty"`
+}
+
 type Route struct {
 	Name         string   `yaml:"name"`
-	Prefix       string   `yaml:"prefix"`
+	Match        Match    `yaml:"match"`
 	ClusterNames []string `yaml:"clusters"`
+	IsGrpc       bool     `yaml:"grpc"`
+	Rewrite      *Rewrite `yaml:"rewrite,omitempty"`
+	ExternalAuth *bool    `yaml:"external_auth,omitempty"`
 }
 
 type Cluster struct {
 	Name      string     `yaml:"name"`
+	IsGrpc    bool       `yaml:"grpc"`
 	Endpoints []Endpoint `yaml:"endpoints"`
 }
 
 type Endpoint struct {
 	Address string `yaml:"address"`
-	Port    uint32 `yaml:port"`
+	Port    uint32 `yaml:"port"`
+}
+
+type Authenticator struct {
+	Name      string   `yaml:"name"`
+	Issuer    string   `yaml:"iss"`
+	Audiences []string `yaml:"aud"`
+	Forward   bool     `yaml:"forward"`
+	Secret    string   `yaml:"secret"`
+	Match     Match    `yaml:"match"`
 }

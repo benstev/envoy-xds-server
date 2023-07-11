@@ -15,14 +15,14 @@
 package processor
 
 import (
+	"context"
 	"math"
 	"math/rand"
 	"os"
 	"strconv"
 
+	"github.com/stevesloka/envoy-xds-server/internal/auth"
 	"github.com/stevesloka/envoy-xds-server/internal/resources"
-
-	"github.com/envoyproxy/go-control-plane/pkg/cache/types"
 
 	"github.com/stevesloka/envoy-xds-server/internal/xdscache"
 
@@ -43,17 +43,19 @@ type Processor struct {
 	xdsCache xdscache.XDSCache
 }
 
-func NewProcessor(cache cache.SnapshotCache, nodeID string, log logrus.FieldLogger) *Processor {
+func NewProcessor(cache cache.SnapshotCache, nodeID string, log logrus.FieldLogger, withAccessLog bool) *Processor {
 	return &Processor{
 		cache:           cache,
 		nodeID:          nodeID,
 		snapshotVersion: rand.Int63n(1000),
 		FieldLogger:     log,
 		xdsCache: xdscache.XDSCache{
-			Listeners: make(map[string]resources.Listener),
-			Clusters:  make(map[string]resources.Cluster),
-			Routes:    make(map[string]resources.Route),
-			Endpoints: make(map[string]resources.Endpoint),
+			Listeners:      make(map[string]resources.Listener),
+			Clusters:       make(map[string]resources.Cluster),
+			Routes:         make(map[string]resources.Route),
+			Endpoints:      make(map[string]resources.Endpoint),
+			Authenticators: make(map[string]auth.Authenticator),
+			WithAccessLog:  withAccessLog,
 		},
 	}
 }
@@ -82,6 +84,11 @@ func (p *Processor) ProcessFile(file watcher.NotifyMessage) {
 		return
 	}
 
+	// Parse authenticators
+	for _, a := range envoyConfig.Authenticators {
+		p.xdsCache.AddAuthenticator(a.Name, a.Issuer, a.Audiences, a.Forward, a.Secret, a.Match)
+	}
+
 	// Parse Listeners
 	for _, l := range envoyConfig.Listeners {
 		var lRoutes []string
@@ -92,13 +99,13 @@ func (p *Processor) ProcessFile(file watcher.NotifyMessage) {
 		p.xdsCache.AddListener(l.Name, lRoutes, l.Address, l.Port)
 
 		for _, r := range l.Routes {
-			p.xdsCache.AddRoute(r.Name, r.Prefix, r.ClusterNames)
+			p.xdsCache.AddRoute(r.Name, r.Match, r.ClusterNames, r.IsGrpc, r.Rewrite, r.ExternalAuth)
 		}
 	}
 
 	// Parse Clusters
 	for _, c := range envoyConfig.Clusters {
-		p.xdsCache.AddCluster(c.Name)
+		p.xdsCache.AddCluster(c.Name, c.IsGrpc)
 
 		// Parse endpoints
 		for _, e := range c.Endpoints {
@@ -107,14 +114,9 @@ func (p *Processor) ProcessFile(file watcher.NotifyMessage) {
 	}
 
 	// Create the snapshot that we'll serve to Envoy
-	snapshot := cache.NewSnapshot(
-		p.newSnapshotVersion(),         // version
-		p.xdsCache.EndpointsContents(), // endpoints
-		p.xdsCache.ClusterContents(),   // clusters
-		p.xdsCache.RouteContents(),     // routes
-		p.xdsCache.ListenerContents(),  // listeners
-		[]types.Resource{},             // runtimes
-		[]types.Resource{},             // secrets
+	snapshot, _ := cache.NewSnapshot(
+		p.newSnapshotVersion(),
+		p.xdsCache.MakeSnapshot(),
 	)
 
 	if err := snapshot.Consistent(); err != nil {
@@ -124,7 +126,7 @@ func (p *Processor) ProcessFile(file watcher.NotifyMessage) {
 	p.Debugf("will serve snapshot %+v", snapshot)
 
 	// Add the snapshot to the cache
-	if err := p.cache.SetSnapshot(p.nodeID, snapshot); err != nil {
+	if err := p.cache.SetSnapshot(context.Background(), p.nodeID, snapshot); err != nil {
 		p.Errorf("snapshot error %q for %+v", err, snapshot)
 		os.Exit(1)
 	}

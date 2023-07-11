@@ -16,7 +16,7 @@ package processor
 
 import (
 	"fmt"
-	"io/ioutil"
+	"os"
 
 	"github.com/stevesloka/envoy-xds-server/apis/v1alpha1"
 	"gopkg.in/yaml.v2"
@@ -26,9 +26,9 @@ import (
 func parseYaml(file string) (*v1alpha1.EnvoyConfig, error) {
 	var config v1alpha1.EnvoyConfig
 
-	yamlFile, err := ioutil.ReadFile(file)
+	yamlFile, err := os.ReadFile(file)
 	if err != nil {
-		return nil, fmt.Errorf("Error reading YAML file: %s\n", err)
+		return nil, fmt.Errorf("error reading YAML file: %s", err)
 	}
 
 	err = yaml.Unmarshal(yamlFile, &config)

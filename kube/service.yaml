@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: envoy-xds-server
+  name: envoy-xds-server
+spec:
+  ports:
+  - name: xds
+    port: 9002
+    protocol: TCP
+    targetPort: 9002
+  selector:
+    app: envoy-xds-server
+

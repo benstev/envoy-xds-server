@@ -14,6 +14,8 @@
 
 package resources
 
+import api "github.com/stevesloka/envoy-xds-server/apis/v1alpha1"
+
 type Listener struct {
 	Name       string
 	Address    string
@@ -22,17 +24,29 @@ type Listener struct {
 }
 
 type Route struct {
-	Name    string
-	Prefix  string
-	Cluster string
+	Name         string
+	Match        api.Match
+	Cluster      string
+	IsGrpc       bool
+	Rewrite      *api.Rewrite
+	ExternalAuth *bool
 }
 
 type Cluster struct {
 	Name      string
+	IsGrpc    bool
 	Endpoints []Endpoint
 }
 
 type Endpoint struct {
 	UpstreamHost string
 	UpstreamPort uint32
+}
+
+type Authenticator struct {
+	Issuer    string
+	Audiences []string
+	Forward   bool
+	Secret    string
+	Matches   []api.Match
 }

@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: envoy-xds-server
+  labels:
+    app: envoy-xds-server
+spec:
+  selector:
+    matchLabels:
+      app: envoy-xds-server
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: envoy-xds-server
+    spec:
+      volumes:
+      - name: xds-volume
+        configMap:
+          name: xds-config
+          items:
+            - key: config.yaml
+              path: config.yaml
+      containers:
+      - name: envoy-xds-server
+        image: envoy-xds-server
+        command: [ "/bin/envoy-xds-server", "--debug", "--withAccessLog" ]
+        env:
+          - name: GIN_MODE
+            value: release
+          - name: LOG_LEVEL
+            value: "1"
+        ports:
+        - name: xds
+          containerPort: 9002
+        volumeMounts:
+        - name: xds-volume
+          mountPath: "/config"

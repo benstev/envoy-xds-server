@@ -1,2 +1,7 @@
 config/
 .idea/
+work/
+envoy/
+.vscode
+build/
+.DS_Store

@@ -1,0 +1,18 @@
+apiVersion: skaffold/v4beta4
+kind: Config
+metadata:
+  name: envoy-xds-server
+build:
+  platforms: ["linux/amd64"]
+  artifacts:
+    - image: envoy-xds-server
+      docker:
+        dockerfile: Dockerfile
+        buildArgs: 
+          VERSION: "{{ .VERSION }}"
+          COMMIT_HASH: "{{ .COMMIT_HASH }}"
+          BUILD_DATE: "{{ .BUILD_DATE }}"
+manifests:
+  rawYaml:
+    - kube/deployment.yaml
+    - kube/service.yaml
