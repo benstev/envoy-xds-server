@@ -26,7 +26,8 @@ spec:
       containers:
       - name: envoy-xds-server
         image: envoy-xds-server
-        command: [ "/bin/envoy-xds-server", "--debug", "--withAccessLog" ]
+        # command: [ "/bin/envoy-xds-server", "--debug", "--withAccessLog" ]
+        command: [ "/bin/envoy-xds-server" ]
         env:
           - name: GIN_MODE
             value: release
