@@ -28,7 +28,7 @@ type XDSCache struct {
 	Routes         map[string]resources.Route
 	Clusters       map[string]resources.Cluster
 	Endpoints      map[string]resources.Endpoint
-	Authenticators map[string]auth.Authenticator
+	Authenticators *auth.Authenticators
 	WithAccessLog  bool
 }
 
@@ -70,16 +70,6 @@ func (xds *XDSCache) EndpointsContents() []types.Resource {
 	}
 
 	return r
-}
-
-func (xds *XDSCache) AddAuthenticator(name string, iss string, aud []string, forward bool, secret string, match api.Match) {
-	xds.Authenticators[name] = auth.Authenticator{
-		Issuer:    iss,
-		Audiences: aud,
-		Forward:   forward,
-		Secret:    secret,
-		Match:     match,
-	}
 }
 
 func (xds *XDSCache) AddListener(name string, routeNames []string, address string, port uint32) {

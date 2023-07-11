@@ -42,11 +42,3 @@ type Endpoint struct {
 	UpstreamHost string
 	UpstreamPort uint32
 }
-
-type Authenticator struct {
-	Issuer    string
-	Audiences []string
-	Forward   bool
-	Secret    string
-	Matches   []api.Match
-}

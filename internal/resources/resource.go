@@ -193,7 +193,7 @@ func MakeRoute(routes []Route) *route.RouteConfiguration {
 	}
 }
 
-func makeHTTPConnectionManager(withAccessLog bool, authenticators map[string]auth.Authenticator) *anypb.Any {
+func makeHTTPConnectionManager(withAccessLog bool, authenticators *auth.Authenticators) *anypb.Any {
 
 	routerConfig, _ := anypb.New(&router.Router{})
 	corsConfig, _ := anypb.New(&cors.Cors{})
@@ -224,7 +224,7 @@ func makeHTTPConnectionManager(withAccessLog bool, authenticators map[string]aut
 			},
 			{
 				Name:       "envoy.extensions.filters.http.jwt_authn.v3.JwtAuthentication",
-				ConfigType: &hcm.HttpFilter_TypedConfig{TypedConfig: auth.JwtAuthConfig(authenticators)},
+				ConfigType: &hcm.HttpFilter_TypedConfig{TypedConfig: authenticators.Config()},
 			},
 			{
 				Name:       wellknown.Router,
@@ -246,7 +246,7 @@ func makeHTTPConnectionManager(withAccessLog bool, authenticators map[string]aut
 	return pbst
 }
 
-func MakeHTTPListener(listenerName, route, address string, port uint32, withAccessLog bool, authenticators map[string]auth.Authenticator) *listener.Listener {
+func MakeHTTPListener(listenerName, route, address string, port uint32, withAccessLog bool, authenticators *auth.Authenticators) *listener.Listener {
 	return &listener.Listener{
 		Name: listenerName,
 		Address: &core.Address{

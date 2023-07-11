@@ -22,6 +22,7 @@ import (
 	serverv3 "github.com/envoyproxy/go-control-plane/pkg/server/v3"
 	log "github.com/sirupsen/logrus"
 	"github.com/stevesloka/envoy-xds-server/internal"
+	"github.com/stevesloka/envoy-xds-server/internal/auth"
 	"github.com/stevesloka/envoy-xds-server/internal/processor"
 	"github.com/stevesloka/envoy-xds-server/internal/server"
 	"github.com/stevesloka/envoy-xds-server/internal/watcher"
@@ -31,6 +32,7 @@ var (
 	l log.FieldLogger
 
 	watchDirectoryFileName string
+	jwtAuthFileName        string
 	port                   uint
 
 	nodeID         string
@@ -53,6 +55,9 @@ func init() {
 	// Define the directory to watch for Envoy configuration files
 	flag.StringVar(&watchDirectoryFileName, "watchDirectoryFileName", "config/config.yaml", "full path to directory to watch for files")
 
+	// Define the JWT authentication configuration file
+	flag.StringVar(&jwtAuthFileName, "jwtAuthFileName", "config/auth.yaml", "full path to JWT auth configuration file")
+
 	flag.BoolVar(&withAcccessLog, "withAccessLog", false, "Enable envoy access log")
 }
 
@@ -66,8 +71,11 @@ func main() {
 	// Create a cache
 	cache := cache.NewSnapshotCache(false, cache.IDHash{}, l)
 
+	// load authenticators
+	authenticators := auth.NewAuthenticators().Load(jwtAuthFileName)
+
 	// Create a processor
-	proc := processor.NewProcessor(cache, nodeID, log.WithField("context", "processor"), withAcccessLog)
+	proc := processor.NewProcessor(cache, nodeID, log.WithField("context", "processor"), withAcccessLog, authenticators)
 
 	// Create initial snapshot from file
 	proc.ProcessFile(watcher.NotifyMessage{

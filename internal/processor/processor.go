@@ -43,7 +43,7 @@ type Processor struct {
 	xdsCache xdscache.XDSCache
 }
 
-func NewProcessor(cache cache.SnapshotCache, nodeID string, log logrus.FieldLogger, withAccessLog bool) *Processor {
+func NewProcessor(cache cache.SnapshotCache, nodeID string, log logrus.FieldLogger, withAccessLog bool, authenticators *auth.Authenticators) *Processor {
 	return &Processor{
 		cache:           cache,
 		nodeID:          nodeID,
@@ -54,8 +54,8 @@ func NewProcessor(cache cache.SnapshotCache, nodeID string, log logrus.FieldLogg
 			Clusters:       make(map[string]resources.Cluster),
 			Routes:         make(map[string]resources.Route),
 			Endpoints:      make(map[string]resources.Endpoint),
-			Authenticators: make(map[string]auth.Authenticator),
 			WithAccessLog:  withAccessLog,
+			Authenticators: authenticators,
 		},
 	}
 }
@@ -82,11 +82,6 @@ func (p *Processor) ProcessFile(file watcher.NotifyMessage) {
 	if err != nil {
 		p.Errorf("error parsing yaml file: %+v", err)
 		return
-	}
-
-	// Parse authenticators
-	for _, a := range envoyConfig.Authenticators {
-		p.xdsCache.AddAuthenticator(a.Name, a.Issuer, a.Audiences, a.Forward, a.Secret, a.Match)
 	}
 
 	// Parse Listeners

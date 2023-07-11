@@ -15,9 +15,8 @@
 package v1alpha1
 
 type EnvoyConfig struct {
-	Name           string `yaml:"name"`
-	Spec           `yaml:"spec"`
-	Authenticators []Authenticator
+	Name string `yaml:"name"`
+	Spec `yaml:"spec"`
 }
 
 type Spec struct {
@@ -65,13 +64,4 @@ type Cluster struct {
 type Endpoint struct {
 	Address string `yaml:"address"`
 	Port    uint32 `yaml:"port"`
-}
-
-type Authenticator struct {
-	Name      string   `yaml:"name"`
-	Issuer    string   `yaml:"iss"`
-	Audiences []string `yaml:"aud"`
-	Forward   bool     `yaml:"forward"`
-	Secret    string   `yaml:"secret"`
-	Match     Match    `yaml:"match"`
 }
