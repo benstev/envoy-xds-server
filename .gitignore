@@ -5,3 +5,4 @@ envoy/
 .vscode
 build/
 .DS_Store
+tags.json
