@@ -21,6 +21,8 @@ spec:
           items:
             - key: config.yaml
               path: config.yaml
+            - key: auth.yaml
+              path: auth.yaml
       containers:
       - name: envoy-xds-server
         image: envoy-xds-server
