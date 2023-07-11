@@ -1,3 +1,12 @@
+
+# Upgrade for personal use
+
+- Kubernetes deployment
+- Ext authorization
+- JWT auth
+- Route path, prefix, headers matchers
+- Grpc differentiation
+
 # Envoy XDS Server
 
 This is a sample repo which demonstrates how to spin up an xDS Server for Envoy Proxy. 
