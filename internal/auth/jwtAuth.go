@@ -45,7 +45,6 @@ type (
 
 const (
 	AUTHS_ENDPOINT = "/authenticators"
-	JKWS_ENDPOINT  = "/jwks/opener_jwt"
 )
 
 func NewAuthenticators(apikeysUrl string) *Authenticators {
