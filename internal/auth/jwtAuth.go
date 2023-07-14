@@ -2,17 +2,18 @@ package auth
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
-	"os"
+	"net/http"
+	"time"
 
 	core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	jwtauth "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/jwt_authn/v3"
-	"github.com/stevesloka/envoy-xds-server/internal/matcher"
-	"google.golang.org/protobuf/types/known/anypb"
-
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	api "github.com/stevesloka/envoy-xds-server/apis/v1alpha1"
-	"gopkg.in/yaml.v2"
+	"github.com/stevesloka/envoy-xds-server/internal/matcher"
+	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type (
@@ -21,16 +22,20 @@ type (
 	}
 
 	Authenticators struct {
-		authenticators map[string]Authenticator
+		authenticators []Authenticator
+		apikeysUrl     string
 	}
 
 	Authenticator struct {
-		Name      string    `yaml:"name"`
-		Issuer    string    `yaml:"iss"`
-		Audiences []string  `yaml:"aud"`
-		Forward   bool      `yaml:"forward"`
-		Secret    string    `yaml:"secret"`
-		Match     api.Match `yaml:"match"`
+		Name      string   `json:"name"`
+		Issuer    string   `json:"iss"`
+		Audiences []string `json:"aud"`
+		// Name      string   `yaml:"name"`
+		// Issuer    string   `yaml:"iss"`
+		// Audiences []string `yaml:"aud"`
+		// Forward bool `yaml:"forward"`
+		// Secret    string    `yaml:"secret"`
+		// Match api.Match `yaml:"match"`
 	}
 
 	JSONWebKeySet struct {
@@ -38,81 +43,80 @@ type (
 	}
 )
 
-func NewAuthenticators() *Authenticators { return &Authenticators{make(map[string]Authenticator)} }
+const (
+	AUTHS_ENDPOINT = "/authenticators"
+	JKWS_ENDPOINT  = "/jwks/opener_jwt"
+)
 
-func (c *Authenticators) Load(file string) *Authenticators {
+func NewAuthenticators(apikeysUrl string) *Authenticators {
+	return &Authenticators{make([]Authenticator, 0), apikeysUrl}
+}
 
-	var conf Config
-
-	yamlFile, err := os.ReadFile(file)
-	if err != nil {
-		log.Fatalf("error reading JWT Auth YAML file: %s", err)
-	}
-	err = yaml.Unmarshal(yamlFile, &conf)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	authenticators := make(map[string]Authenticator)
-	for _, a := range conf.Authenticators {
-		authenticators[a.Name] = a
+func (c *Authenticators) Load() *Authenticators {
+	resp, err := http.Get(c.apikeysUrl + AUTHS_ENDPOINT)
+	if err != nil || resp.StatusCode != 200 {
+		log.Panicf("can't fetch auth records, err : %s", err.Error())
+		return nil
 	}
 
-	c.authenticators = authenticators
+	defer resp.Body.Close()
+
+	auths := make([]Authenticator, 0)
+	if err := json.NewDecoder(resp.Body).Decode(&auths); err != nil {
+		log.Panicf("can't decode auth record, err : %s", err.Error())
+		return nil
+	}
+
+	c.authenticators = auths
 	return c
 }
 
-func (a *Authenticator) getJwks() []byte {
-
-	raw := []byte(a.Secret)
-	key, err := jwk.FromRaw(raw)
-	if err != nil {
-		os.Exit(1)
+func (c *Authenticators) remoteJwkSource(a Authenticator) *jwtauth.JwtProvider_RemoteJwks {
+	return &jwtauth.JwtProvider_RemoteJwks{
+		RemoteJwks: &jwtauth.RemoteJwks{
+			HttpUri: &core.HttpUri{
+				Uri: fmt.Sprintf("%s/jwks/%s", c.apikeysUrl, a.Name),
+				HttpUpstreamType: &core.HttpUri_Cluster{
+					Cluster: "ext-authz-http",
+				},
+				Timeout: durationpb.New(60 * time.Second), // BST
+			},
+			CacheDuration: durationpb.New(1 * time.Second), // BST
+		},
 	}
-
-	if _, ok := key.(jwk.SymmetricKey); !ok {
-		os.Exit(1)
-	}
-
-	key.Set(jwk.KeyIDKey, a.Name)
-
-	jwks := JSONWebKeySet{Keys: []jwk.Key{key}}
-
-	b, err := json.Marshal(jwks)
-	if err != nil {
-		os.Exit(1)
-	}
-	return b
 }
 
 func (c *Authenticators) providers() map[string]*jwtauth.JwtProvider {
 	providers := make(map[string]*jwtauth.JwtProvider)
-	for k, a := range c.authenticators {
+	for _, a := range c.authenticators {
 
-		providers[k] = &jwtauth.JwtProvider{
+		providers[a.Name] = &jwtauth.JwtProvider{
 			Issuer:    a.Issuer,
 			Audiences: a.Audiences,
-			Forward:   a.Forward,
-			JwksSourceSpecifier: &jwtauth.JwtProvider_LocalJwks{
-				LocalJwks: &core.DataSource{Specifier: &core.DataSource_InlineBytes{
-					InlineBytes: a.getJwks(),
-				}},
-			},
+			// Forward:             true,
+			JwksSourceSpecifier: c.remoteJwkSource(a),
 		}
 	}
 	return providers
 }
 
+func (c *Authenticators) authMatcher(a Authenticator) api.Match {
+	pfx := fmt.Sprintf("/%s/", a.Name)
+	return api.Match{
+		Prefix: &pfx,
+	}
+}
+
 func (c *Authenticators) rules() []*jwtauth.RequirementRule {
 	rules := make([]*jwtauth.RequirementRule, 0)
-	for req, a := range c.authenticators {
+	for _, a := range c.authenticators {
 
 		rules = append(rules, &jwtauth.RequirementRule{
-			Match: matcher.MakeMatch(a.Match),
+			Match: matcher.MakeMatch(c.authMatcher(a)),
 			RequirementType: &jwtauth.RequirementRule_Requires{
 				Requires: &jwtauth.JwtRequirement{
 					RequiresType: &jwtauth.JwtRequirement_ProviderName{
-						ProviderName: req,
+						ProviderName: a.Name,
 					},
 				},
 			},
@@ -123,10 +127,10 @@ func (c *Authenticators) rules() []*jwtauth.RequirementRule {
 }
 
 func (c *Authenticators) Config() *anypb.Any {
-	a := &jwtauth.JwtAuthentication{
+	conf := &jwtauth.JwtAuthentication{
 		Providers: c.providers(),
 		Rules:     c.rules(),
 	}
-	authConfig, _ := anypb.New(a)
+	authConfig, _ := anypb.New(conf)
 	return authConfig
 }

@@ -31,7 +31,7 @@ undeploy:
 
 .PHONY: config
 config:
-	kubectl create configmap xds-config --from-file=./config/config.yaml --from-file=./config/auth.yaml
+	kubectl create configmap xds-config --from-file=./config/config.yaml
 
 .PHONY:delconfig
 delconfig:

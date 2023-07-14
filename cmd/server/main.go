@@ -32,7 +32,7 @@ var (
 	l log.FieldLogger
 
 	watchDirectoryFileName string
-	jwtAuthFileName        string
+	jwtAuthBasePath        string
 	port                   uint
 
 	nodeID         string
@@ -56,7 +56,7 @@ func init() {
 	flag.StringVar(&watchDirectoryFileName, "watchDirectoryFileName", "config/config.yaml", "full path to directory to watch for files")
 
 	// Define the JWT authentication configuration file
-	flag.StringVar(&jwtAuthFileName, "jwtAuthFileName", "config/auth.yaml", "full path to JWT auth configuration file")
+	flag.StringVar(&jwtAuthBasePath, "jwtAuthBasePath", "http://apikeys:8100/keys", "base url path to JWT auth definition server")
 
 	flag.BoolVar(&withAcccessLog, "withAccessLog", false, "Enable envoy access log")
 }
@@ -72,7 +72,7 @@ func main() {
 	cache := cache.NewSnapshotCache(false, cache.IDHash{}, l)
 
 	// load authenticators
-	authenticators := auth.NewAuthenticators().Load(jwtAuthFileName)
+	authenticators := auth.NewAuthenticators(jwtAuthBasePath).Load()
 
 	// Create a processor
 	proc := processor.NewProcessor(cache, nodeID, log.WithField("context", "processor"), withAcccessLog, authenticators)
